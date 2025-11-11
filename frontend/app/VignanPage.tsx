@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import Toast from "react-native-toast-message";
 import { useRouter } from "expo-router";
@@ -110,6 +110,7 @@ export default function VignanPage() {
   const [selectedMid, setSelectedMid] = useState<string>('1');
   const [isLoading, setIsLoading] = useState(false);
   const [marks, setMarks] = useState<SubjectMarks[]>([]);
+  const lastFetchKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -128,9 +129,41 @@ export default function VignanPage() {
 
       if (savedSemester) setSelectedSemester(savedSemester);
       if (savedMid) setSelectedMid(savedMid);
+
+      // Prefetch marks for the saved (or default) selection so the page shows results immediately
+      const semToFetch = savedSemester ?? selectedSemester;
+      const midToFetch = savedMid ?? selectedMid;
+      // call fetchMarks directly (defined below) to avoid race with setState
+      fetchMarks(semToFetch, midToFetch);
     };
     loadData();
   }, []);
+
+  // Helper that actually fetches marks. Accepts optional semester/mid to avoid race with setState
+  async function fetchMarks(semester?: string, mid?: string) {
+    const sem = semester ?? selectedSemester;
+    const m = mid ?? selectedMid;
+    const key = `${sem}-${m}`;
+    // avoid refetching the same selection
+    if (lastFetchKeyRef.current === key) return;
+
+    setIsLoading(true);
+    try {
+      const fetchedMarks = await getMidMarks(sem, m);
+      setMarks(fetchedMarks);
+      lastFetchKeyRef.current = key;
+      Toast.show({ type: "success", text1: "Marks fetched successfully!" });
+    } catch (error) {
+      console.error("Error fetching marks:", error);
+      Toast.show({
+        type: "error",
+        text1: "Failed to fetch marks",
+        text2: "Please try again later.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   const handleLogout = async () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
@@ -149,21 +182,8 @@ export default function VignanPage() {
   };
 
   const handleFetchMarks = async () => {
-    setIsLoading(true);
-    try {
-      const fetchedMarks = await getMidMarks(selectedSemester, selectedMid);
-      setMarks(fetchedMarks);
-      Toast.show({ type: "success", text1: "Marks fetched successfully!" });
-    } catch (error) {
-      console.error("Error fetching marks:", error);
-      Toast.show({
-        type: "error",
-        text1: "Failed to fetch marks",
-        text2: "Please try again later.",
-      });
-    } finally {
-      setIsLoading(false);
-    }
+    // delegate to fetchMarks which handles dedup and toast
+    await fetchMarks();
   };
 
   const handleSelectMid = async (mid: string) => {
@@ -174,6 +194,13 @@ export default function VignanPage() {
       console.warn('Failed to save selected mid', e);
     }
   };
+
+  // When user changes semester or mid, automatically prefetch results (unless already fetched)
+  useEffect(() => {
+    // Only attempt fetch if there's a logged-in user (htno)
+    if (!htno) return;
+    fetchMarks();
+  }, [selectedSemester, selectedMid]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
