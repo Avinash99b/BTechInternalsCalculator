@@ -6,6 +6,7 @@ import {
   Animated,
   Easing,
   Pressable,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -185,13 +186,21 @@ export default function Index() {
                           item.location === undefined && styles.disabledIcon,
                         ]}
                       >
-                        <Ionicons
-                          name={item.icon as any}
-                          size={40}
-                          color={
-                            item.location === undefined ? "#999" : "#FF6347"
-                          }
-                        />
+                        {item.location === 'VignanPage' ? (
+                          <Image
+                            source={require("../assets/images/vignanImage.jpeg")}
+                            style={styles.iconImage}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <Ionicons
+                            name={item.icon as any}
+                            size={40}
+                            color={
+                              item.location === undefined ? "#999" : "#FF6347"
+                            }
+                          />
+                        )}
                       </View>
                       <Text
                         adjustsFontSizeToFit
@@ -337,6 +346,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
+  },
+  iconImage: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    overflow: "hidden",
   },
   disabledIcon: {
     backgroundColor: "#f0f0f0",
