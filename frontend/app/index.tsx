@@ -8,20 +8,26 @@ import {
   Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import RegulationItem from "./components/RegulationItem";
-import { router, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import Toast from "react-native-toast-message";
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import LoginModal from "./components/LoginModal";
+import { Credentials, getCredentials, saveCredentials } from "./utils/storage";
+import { login as apiLogin } from './utils/vignanApi';
 
 export default function Index() {
-  const navigator = useRouter();
+  const router = useRouter();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
+  const [loginModalVisible, setLoginModalVisible] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
   const items = [
     { name: "R23", location: "./R23Page", icon: "school" },
+    { name: "Vignan Lara", location: "VignanPage", icon: "cloud" },
     { name: "R24\n(Soon)", location: undefined, icon: "hourglass" },
   ];
 
@@ -48,12 +54,68 @@ export default function Index() {
     ]).start();
   }, []);
 
+  const handleLogin = async (credentials: Credentials) => {
+    setIsLoading(true);
+    const success = await apiLogin(credentials);
+    setIsLoading(false);
+
+    if (success) {
+      await saveCredentials(credentials);
+      setLoginModalVisible(false);
+      Toast.show({
+        type: 'success',
+        text1: 'Login Successful',
+      });
+      router.push('./VignanPage');
+    } else {
+      Toast.show({
+        type: 'error',
+        text1: 'Login Failed',
+        text2: 'Please check your credentials and try again.',
+      });
+    }
+  };
+
+  const handleCancelLogin = () => {
+    setLoginModalVisible(false);
+  };
+
+  const handleCardPress = async (item: (typeof items)[0]) => {
+    if (item.location === undefined) {
+      Toast.show({
+        type: "info",
+        text1: "Coming Soon! 🚀",
+        text2: "This feature will be available soon",
+        visibilityTime: 2000,
+      });
+      return;
+    }
+
+    if (item.location === 'VignanPage') {
+      const creds = await getCredentials();
+      if (creds) {
+        router.push('./VignanPage');
+      } else {
+        setLoginModalVisible(true);
+      }
+    } else {
+      router.push(item.location as any);
+    }
+  };
+
   return (
     <SafeAreaView
-      style={{ flex: 1, backgroundColor: "#ff0000ff" }}
+      style={{ flex: 1, backgroundColor: "#f8f8f8" }}
       edges={["top", "left", "right"]}
     >
       <View style={{ flex: 1, backgroundColor: "white" }}>
+        <LoginModal
+          visible={loginModalVisible}
+          onLogin={handleLogin}
+          onCancel={handleCancelLogin}
+          loading={isLoading}
+        />
+
         <Animated.View
           style={[
             styles.headerContainer,
@@ -67,7 +129,7 @@ export default function Index() {
             <Ionicons name="calculator" size={48} color="#FF6347" />
           </View>
           <Text style={styles.title}>Internals Calculator</Text>
-          <Text style={styles.subtitle}>Select Your Regulation</Text>
+          <Text style={styles.subtitle}>Select Your Section</Text>
         </Animated.View>
 
         <Animated.View style={[styles.gridContainer, { opacity: fadeAnim }]}>
@@ -114,18 +176,7 @@ export default function Index() {
                       item.location === undefined && styles.disabledCard,
                       { transform: [{ scale: pressed ? 0.95 : 1 }] },
                     ]}
-                    onPress={() => {
-                      if (item.location === undefined) {
-                        Toast.show({
-                          type: "info",
-                          text1: "Coming Soon! 🚀",
-                          text2: "This regulation will be available soon",
-                          visibilityTime: 2000,
-                        });
-                        return;
-                      }
-                      router.push("./R23Page");
-                    }}
+                    onPress={() => handleCardPress(item)}
                   >
                     <View style={styles.cardContent}>
                       <View
@@ -176,6 +227,7 @@ export default function Index() {
         >
           <View style={styles.footerContent}>
             <Ionicons
+              style={styles.footerIcon}
               name="information-circle-outline"
               size={20}
               color="#666"
@@ -242,12 +294,13 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
-    alignItems: "center",
+    alignItems: "stretch",
   },
   itemWrapper: {
-    width: "48%",
+    flexBasis: "48%",
     aspectRatio: 1,
     padding: 8,
+    margin: "1%",
   },
   regulationCard: {
     flex: 1,
@@ -259,12 +312,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 12,
     elevation: 6,
-    borderWidth: 2,
-    borderColor: "#FF6347",
+    borderWidth: 0,
   },
   disabledCard: {
-    borderColor: "#e0e0e0",
-    opacity: 0.6,
+    backgroundColor: "#fafafa",
+    opacity: 0.85,
   },
   cardContent: {
     flex: 1,
@@ -296,7 +348,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 10,
     right: 10,
-    backgroundColor: "#FFD700",
+    backgroundColor: "#FFE5E0",
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
@@ -304,7 +356,7 @@ const styles = StyleSheet.create({
   comingSoonText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#fff",
+    color: "#333",
   },
   footer: {
     paddingVertical: 20,
@@ -322,7 +374,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    // gap is not supported in RN; use margin on icon/text instead
+  },
+  footerIcon: {
+    marginRight: 8,
   },
   footerText: {
     fontSize: 14,

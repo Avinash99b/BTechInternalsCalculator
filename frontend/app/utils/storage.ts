@@ -10,12 +10,20 @@ export interface Preset {
   mid1Marks: string;
   mid1SQMarks: string;
   mid2Marks: string;
-  mid2SQMarks: string;
+  mid2SQMarks:string;
   finalInternals?: number; // Optional for backward compatibility
 }
 
-const PRESETS_KEY = '@internals_presets';
+export interface Credentials {
+  htno: string;
+  password?: string;
+}
 
+const PRESETS_KEY = '@internals_presets';
+const CREDENTIALS_KEY = '@vignan_credentials';
+const COOKIE_KEY = '@vignan_cookie';
+
+// Preset Management
 export const savePreset = async (preset: Preset): Promise<void> => {
   try {
     const existingPresets = await getPresets();
@@ -60,5 +68,62 @@ export const presetExists = async (subjectName: string): Promise<boolean> => {
   } catch (error) {
     console.error('Error checking preset existence:', error);
     return false;
+  }
+};
+
+// Credential Management
+export const saveCredentials = async (credentials: Credentials): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(CREDENTIALS_KEY, JSON.stringify(credentials));
+  } catch (error) {
+    console.error('Error saving credentials:', error);
+    throw error;
+  }
+};
+
+export const getCredentials = async (): Promise<Credentials | null> => {
+  try {
+    const creds = await AsyncStorage.getItem(CREDENTIALS_KEY);
+    return creds ? JSON.parse(creds) : null;
+  } catch (error) {
+    console.error('Error getting credentials:', error);
+    return null;
+  }
+};
+
+export const clearCredentials = async (): Promise<void> => {
+  try {
+    await AsyncStorage.removeItem(CREDENTIALS_KEY);
+  } catch (error) {
+    console.error('Error clearing credentials:', error);
+    throw error;
+  }
+};
+
+// Session Management
+export const saveSessionCookie = async (cookie: string): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(COOKIE_KEY, cookie);
+  } catch (error) {
+    console.error('Error saving session cookie:', error);
+    throw error;
+  }
+};
+
+export const getSessionCookie = async (): Promise<string | null> => {
+  try {
+    return await AsyncStorage.getItem(COOKIE_KEY);
+  } catch (error) {
+    console.error('Error getting session cookie:', error);
+    return null;
+  }
+};
+
+export const clearSessionCookie = async (): Promise<void> => {
+  try {
+    await AsyncStorage.removeItem(COOKIE_KEY);
+  } catch (error) {
+    console.error('Error clearing session cookie:', error);
+    throw error;
   }
 };
