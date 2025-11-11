@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Credentials } from './utils/storage';
+import { Credentials } from '../utils/storage';
 
 interface LoginModalProps {
   visible: boolean;
@@ -42,7 +42,7 @@ export default function LoginModal({ visible, onLogin, onCancel, loading }: Logi
 
   const handleLogin = () => {
     if (htno.trim() && password.trim()) {
-      onLogin({ htno, password });
+      onLogin({ htno, password:password.toUpperCase() });
     }
   };
 

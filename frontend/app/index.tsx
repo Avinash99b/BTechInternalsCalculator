@@ -14,7 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useRef, useState } from "react";
 import LoginModal from "./components/LoginModal";
 import { Credentials, getCredentials, saveCredentials } from "./utils/storage";
-import { login as apiLogin } from './utils/vignanApi';
+import { login as apiLogin } from './utils/vignanApiClass';
 
 export default function Index() {
   const router = useRouter();
@@ -27,8 +27,8 @@ export default function Index() {
 
   const items = [
     { name: "R23", location: "./R23Page", icon: "school" },
-    { name: "Vignan Lara", location: "VignanPage", icon: "cloud" },
     { name: "R24\n(Soon)", location: undefined, icon: "hourglass" },
+    { name: "Vignan Lara", location: "VignanPage", icon: "cloud" },
   ];
 
   useEffect(() => {
@@ -194,6 +194,10 @@ export default function Index() {
                         />
                       </View>
                       <Text
+                        adjustsFontSizeToFit
+                        numberOfLines={2}
+                        minimumFontScale={0.7}
+                        allowFontScaling
                         style={[
                           styles.cardText,
                           item.location === undefined && styles.disabledText,
@@ -293,20 +297,22 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   listContent: {
-    padding: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
     alignItems: "stretch",
   },
   itemWrapper: {
-    flexBasis: "48%",
+    flex: 1,
+    minWidth: 0,
     aspectRatio: 1,
     padding: 8,
-    margin: "1%",
+    margin: 8,
   },
   regulationCard: {
     flex: 1,
     backgroundColor: "#fff",
     borderRadius: 20,
-    padding: 20,
+    padding: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,

@@ -22,6 +22,8 @@ export interface Credentials {
 const PRESETS_KEY = '@internals_presets';
 const CREDENTIALS_KEY = '@vignan_credentials';
 const COOKIE_KEY = '@vignan_cookie';
+const SELECTED_SEM_KEY = '@vignan_selected_semester';
+const SELECTED_MID_KEY = '@vignan_selected_mid';
 
 // Preset Management
 export const savePreset = async (preset: Preset): Promise<void> => {
@@ -127,3 +129,43 @@ export const clearSessionCookie = async (): Promise<void> => {
     throw error;
   }
 };
+
+// Selected semester persistence
+export const saveSelectedSemester = async (semester: string): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(SELECTED_SEM_KEY, semester);
+  } catch (error) {
+    console.error('Error saving selected semester:', error);
+    throw error;
+  }
+};
+
+export const getSelectedSemester = async (): Promise<string | null> => {
+  try {
+    return await AsyncStorage.getItem(SELECTED_SEM_KEY);
+  } catch (error) {
+    console.error('Error getting selected semester:', error);
+    return null;
+  }
+};
+
+// Selected mid persistence (e.g., '1' for Mid-I, '2' for Mid-II)
+export const saveSelectedMid = async (mid: string): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(SELECTED_MID_KEY, mid);
+  } catch (error) {
+    console.error('Error saving selected mid:', error);
+    throw error;
+  }
+};
+
+export const getSelectedMid = async (): Promise<string | null> => {
+  try {
+    return await AsyncStorage.getItem(SELECTED_MID_KEY);
+  } catch (error) {
+    console.error('Error getting selected mid:', error);
+    return null;
+  }
+};
+
+export default function(){}
