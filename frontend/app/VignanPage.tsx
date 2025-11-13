@@ -24,9 +24,12 @@ import {
   saveSelectedSemester,
   getSelectedMid,
   saveSelectedMid,
+  getMarksFromCache,
+  saveMarksToCache,
+  clearAllMarksCache,
 } from "./utils/storage";
 import { getMidMarks, SubjectMarks } from "./utils/vignanApiClass";
-
+import SubjectDetailModal from "./components/SubjectDetailModal";
 
 // Semester Selector Component
 function SemesterSelector({
@@ -110,58 +113,61 @@ export default function VignanPage() {
   const [selectedMid, setSelectedMid] = useState<string>('1');
   const [isLoading, setIsLoading] = useState(false);
   const [marks, setMarks] = useState<SubjectMarks[]>([]);
+  const [isModalVisible, setModalVisible] = useState(false);
+  const [selectedSubject, setSelectedSubject] = useState<SubjectMarks | null>(null);
   const lastFetchKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
       const creds = await getCredentials();
-      let savedSemester: string | null = null;
-      let savedMid: string | null = null;
-      try {
-        savedSemester = await getSelectedSemester();
-        savedMid = await getSelectedMid();
-      } catch (e) {
-        console.warn('Could not read saved semester', e);
-      }
-
       if (creds) setHtno(creds.htno);
       else router.replace("/");
 
-      if (savedSemester) setSelectedSemester(savedSemester);
-      if (savedMid) setSelectedMid(savedMid);
+      const savedSemester = await getSelectedSemester() || "1";
+      const savedMid = await getSelectedMid() || "1";
+      setSelectedSemester(savedSemester);
+      setSelectedMid(savedMid);
 
-      // Prefetch marks for the saved (or default) selection so the page shows results immediately
-      const semToFetch = savedSemester ?? selectedSemester;
-      const midToFetch = savedMid ?? selectedMid;
-      // call fetchMarks directly (defined below) to avoid race with setState
-      fetchMarks(semToFetch, midToFetch);
+      // Load from cache first
+      const cachedMarks = await getMarksFromCache(savedSemester, savedMid);
+      if (cachedMarks) {
+        setMarks(cachedMarks);
+      }
+
+      // Fetch fresh data in background
+      fetchMarks(savedSemester, savedMid, true);
     };
     loadData();
   }, []);
 
-  // Helper that actually fetches marks. Accepts optional semester/mid to avoid race with setState
-  async function fetchMarks(semester?: string, mid?: string) {
+  async function fetchMarks(semester?: string, mid?: string, isBackground = false) {
     const sem = semester ?? selectedSemester;
     const m = mid ?? selectedMid;
     const key = `${sem}-${m}`;
-    // avoid refetching the same selection
-    if (lastFetchKeyRef.current === key) return;
+    
+    if (lastFetchKeyRef.current === key && !isBackground) return;
 
-    setIsLoading(true);
+    if (!isBackground) setIsLoading(true);
+
     try {
       const fetchedMarks = await getMidMarks(sem, m);
       setMarks(fetchedMarks);
+      await saveMarksToCache(sem, m, fetchedMarks);
       lastFetchKeyRef.current = key;
-      Toast.show({ type: "success", text1: "Marks fetched successfully!" });
+      if (!isBackground) {
+        Toast.show({ type: "success", text1: "Marks fetched successfully!" });
+      }
     } catch (error) {
       console.error("Error fetching marks:", error);
-      Toast.show({
-        type: "error",
-        text1: "Failed to fetch marks",
-        text2: "Please try again later.",
-      });
+      if (!isBackground) {
+        Toast.show({
+          type: "error",
+          text1: "Failed to fetch marks",
+          text2: "Please try again later.",
+        });
+      }
     } finally {
-      setIsLoading(false);
+      if (!isBackground) setIsLoading(false);
     }
   }
 
@@ -174,6 +180,7 @@ export default function VignanPage() {
         onPress: async () => {
           await clearCredentials();
           await clearSessionCookie();
+          await clearAllMarksCache();
           Toast.show({ type: "success", text1: "Logged Out" });
           router.replace("/");
         },
@@ -181,30 +188,69 @@ export default function VignanPage() {
     ]);
   };
 
-  const handleFetchMarks = async () => {
-    // delegate to fetchMarks which handles dedup and toast
-    await fetchMarks();
-  };
-
   const handleSelectMid = async (mid: string) => {
     setSelectedMid(mid);
-    try {
-      await saveSelectedMid(mid);
-    } catch (e) {
-      console.warn('Failed to save selected mid', e);
+    await saveSelectedMid(mid);
+    const cachedMarks = await getMarksFromCache(selectedSemester, mid);
+    if (cachedMarks) {
+      setMarks(cachedMarks);
+    } else {
+      fetchMarks(selectedSemester, mid);
     }
   };
 
-  // When user changes semester or mid, automatically prefetch results (unless already fetched)
+  const handleSubjectPress = (subject: SubjectMarks) => {
+    setSelectedSubject(subject);
+    setModalVisible(true);
+  };
+
+  const handleCloseModal = () => {
+    setModalVisible(false);
+    setSelectedSubject(null);
+  };
+
+  // Get the final marks column name dynamically
+  const getFinalMarksValue = (subject: SubjectMarks): { value: string; isFinal: boolean } => {
+    
+    const keys = Object.keys(subject).filter(k => k !== 'subjectCode' && k !== 'subjectName');
+    
+    // For Mid-II, check if FinalMarks column exists and has a valid value
+    if (selectedMid === '2') {
+      const finalMarksKey = keys.find(k => k.toLowerCase().includes('finalmarks'));
+      if (finalMarksKey) {
+        const finalValue = subject[finalMarksKey] || '';
+        // If final marks exist and are not N/A or empty or just whitespace
+        if (finalValue && finalValue !== 'N/A' && finalValue.trim() !== '' && finalValue.trim() !== '&nbsp;') {
+          return { value: finalValue, isFinal: true };
+        }
+      }
+    }
+    
+    // Look for columns containing "MID-I" or "MID-II"
+    const midColumn = keys.find(k => k.includes('MID-I') || k.includes('MID-II'));
+    if (midColumn) {
+      return { value: subject[midColumn] || 'N/A', isFinal: false };
+    }
+    
+    // Fallback to last column (excluding FinalMarks if it's empty)
+    const lastKey = keys[keys.length - 1];
+    return { value: lastKey ? subject[lastKey] : 'N/A', isFinal: false };
+  };
+
   useEffect(() => {
-    // Only attempt fetch if there's a logged-in user (htno)
     if (!htno) return;
-    fetchMarks();
+    const loadAndFetchMarks = async () => {
+      const cachedMarks = await getMarksFromCache(selectedSemester, selectedMid);
+      if (cachedMarks) {
+        setMarks(cachedMarks);
+      }
+      fetchMarks(selectedSemester, selectedMid, !cachedMarks);
+    };
+    loadAndFetchMarks();
   }, [selectedSemester, selectedMid]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} style={styles.iconButton}>
           <Ionicons name="arrow-back" size={24} color="#333" />
@@ -215,7 +261,6 @@ export default function VignanPage() {
         </Pressable>
       </View>
 
-      {/* Body */}
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
@@ -225,7 +270,7 @@ export default function VignanPage() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Fetch Internal Marks</Text>
+          <Text style={styles.cardTitle}>Select Semester & Mid</Text>
           <SemesterSelector
             selected={selectedSemester}
             onSelect={setSelectedSemester}
@@ -256,21 +301,12 @@ export default function VignanPage() {
               </Pressable>
             </View>
           </View>
-          <Pressable
-            style={({ pressed }) => [
-              styles.button,
-              pressed && { opacity: 0.8 },
-              isLoading && styles.disabledButton,
-            ]}
-            onPress={handleFetchMarks}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Fetch Marks</Text>
-            )}
-          </Pressable>
+          {isLoading && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator color="#007BFF" />
+              <Text style={styles.loadingText}>Fetching marks...</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.card}>
@@ -281,20 +317,36 @@ export default function VignanPage() {
               <Text style={styles.hintText}>Select a semester and tap "Fetch Marks"</Text>
             </View>
           ) : (
-            marks.map((mark, i) => (
-              <View key={i} style={styles.marksItem}>
-                <View style={styles.subjectContainer}>
-                  <Text style={styles.subjectName}>{mark.subjectName}</Text>
-                  <Text style={styles.subjectCode}>{mark.subjectCode}</Text>
-                </View>
-                <View style={styles.marksContainer}>
-                  <Text style={styles.finalMarks}>{mark.finalMarks} / 30</Text>
-                </View>
-              </View>
-            ))
+            marks.map((mark, i) => {
+              const marksData = getFinalMarksValue(mark);
+              return (
+                <TouchableOpacity key={i} style={styles.marksItem} onPress={() => handleSubjectPress(mark)}>
+                  <View style={styles.subjectContainer}>
+                    <Text style={styles.subjectName}>{mark.subjectName}</Text>
+                    <Text style={styles.subjectCode}>{mark.subjectCode}</Text>
+                  </View>
+                  <View style={styles.marksContainer}>
+                    <Text style={[
+                      styles.finalMarks,
+                      marksData.isFinal && styles.finalMarksRed
+                    ]}>
+                      {marksData.value} / 30
+                    </Text>
+                    {marksData.isFinal && (
+                      <Text style={styles.finalMarksLabel}>Final</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })
           )}
         </View>
       </ScrollView>
+      <SubjectDetailModal
+        visible={isModalVisible}
+        onClose={handleCloseModal}
+        subject={selectedSubject}
+      />
       <Toast />
     </SafeAreaView>
   );
@@ -357,6 +409,18 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
   disabledButton: { opacity: 0.6 },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  loadingText: {
+    marginLeft: 10,
+    fontSize: 14,
+    color: '#007BFF',
+  },
   marksItem: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -366,6 +430,15 @@ const styles = StyleSheet.create({
   },
   subjectName: { fontSize: 15.5, color: "#333", flexWrap: 'wrap', flexShrink: 1 },
   finalMarks: { fontSize: 16, fontWeight: "700", color: "#007BFF" },
+  finalMarksRed: { 
+    color: "#ff4444",
+  },
+  finalMarksLabel: {
+    fontSize: 11,
+    color: "#ff4444",
+    fontWeight: "600",
+    marginTop: 2,
+  },
   modalOverlay: {
     flex: 1,
     justifyContent: "center",

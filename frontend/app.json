@@ -51,6 +51,12 @@
         "projectId": "75684e6d-8b40-4b9b-8001-26803c4904d0"
       }
     },
-    "owner": "avinash99"
+    "owner": "avinash99",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/75684e6d-8b40-4b9b-8001-26803c4904d0"
+    }
   }
 }

@@ -10,10 +10,7 @@ const DEFAULT_BASE_URL = 'https://ems.vignanlara.org';
 export interface SubjectMarks {
   subjectCode: string;
   subjectName: string;
-  assignment1: string;
-  assignment2: string;
-  midMarks: string;
-  finalMarks: string;
+  [key: string]: string; // Dynamic columns from the table
 }
 
 class VignanApi {
@@ -104,34 +101,86 @@ class VignanApi {
 
   private parseMarks(html: string): SubjectMarks[] {
     const dom = htmlparser2.parseDocument(html);
-    const rows = domutils.findAll(
+    const allRows = domutils.findAll(
       (el: Node) => {
         if (!domutils.isTag(el) || el.name !== 'tr') return false;
         const parent = domutils.getParent(el) as any;
         return parent && parent.attribs && parent.attribs.id === 'Stud_cpBody_gridSem1';
       },
       dom.children,
-    ).slice(2);
+    );
 
-    if (!rows.length) {
+    if (allRows.length < 3) {
       return [
-        { subjectCode: 'DUM1', subjectName: 'Parsing Failed - Dummy Subject 1', assignment1: '0', assignment2: '0', midMarks: '0', finalMarks: '25' },
-        { subjectCode: 'DUM2', subjectName: 'Parsing Failed - Dummy Subject 2', assignment1: '0', assignment2: '0', midMarks: '0', finalMarks: '28' },
+        { subjectCode: 'DUM1', subjectName: 'Parsing Failed - Dummy Subject 1' },
+        { subjectCode: 'DUM2', subjectName: 'Parsing Failed - Dummy Subject 2' },
       ];
     }
 
-    return rows.map((row) => {
-      const tds = domutils.getChildren(row).filter(domutils.isTag);
-      const getTdText = (index: number) => tds[index] ? domutils.textContent(tds[index] as Element | Text)?.trim() || '' : '';
+    // Parse first header row (contains headers like "FinalMarks" for Mid-2)
+    const firstHeaderRow = allRows[0];
+    const firstHeaderCells = domutils.getChildren(firstHeaderRow).filter(domutils.isTag);
+    const firstRowHeaders: string[] = [];
+    
+    // Extract column names from first header row (skip first 3: Sno, SubCode, Subject Name)
+    for (let i = 3; i < firstHeaderCells.length; i++) {
+      const cellContent = domutils.textContent(firstHeaderCells[i] as Element | Text)?.trim() || '';
+      firstRowHeaders.push(cellContent);
+    }
 
-      return {
+    // Parse second header row (contains detailed column names like "Assignment-I(5m)")
+    const secondHeaderRow = allRows[1];
+    const secondHeaderCells = domutils.getChildren(secondHeaderRow).filter(domutils.isTag);
+    const secondRowHeaders: string[] = [];
+    
+    // Extract column names from second header row (skip first 3: Sno, SubCode, Subject Name)
+    for (let i = 3; i < secondHeaderCells.length; i++) {
+      const cellContent = domutils.textContent(secondHeaderCells[i] as Element | Text)?.trim() || '';
+      secondRowHeaders.push(cellContent);
+    }
+
+    // Merge headers: use second row headers, but fill in first row headers where second row is empty
+    const columnNames: string[] = [];
+    const maxLength = Math.max(firstRowHeaders.length, secondRowHeaders.length);
+    
+    for (let i = 0; i < maxLength; i++) {
+      const secondRowHeader = secondRowHeaders[i] || '';
+      const firstRowHeader = firstRowHeaders[i] || '';
+      
+      // Use second row header if it exists and is not empty, otherwise use first row header
+      if (secondRowHeader && secondRowHeader !== '&nbsp;') {
+        columnNames.push(secondRowHeader);
+      } else if (firstRowHeader && firstRowHeader !== '&nbsp;') {
+        columnNames.push(firstRowHeader);
+      } else {
+        columnNames.push('');
+      }
+    }
+
+    // Parse data rows (start from index 2)
+    const dataRows = allRows.slice(2);
+
+    return dataRows.map((row) => {
+      const tds = domutils.getChildren(row).filter(domutils.isTag);
+      const getTdText = (index: number) => {
+        if (!tds[index]) return 'N/A';
+        const text = domutils.textContent(tds[index] as Element | Text)?.trim() || '';
+        return text === '' || text === '&nbsp;' ? 'N/A' : text;
+      };
+
+      const subject: SubjectMarks = {
         subjectCode: getTdText(1),
         subjectName: getTdText(2),
-        assignment1: getTdText(3),
-        assignment2: getTdText(4),
-        midMarks: getTdText(5),
-        finalMarks: getTdText(6),
       };
+
+      // Add dynamic columns based on merged headers
+      columnNames.forEach((columnName, index) => {
+        if (columnName) {
+          subject[columnName] = getTdText(3 + index);
+        }
+      });
+
+      return subject;
     });
   }
 
@@ -156,7 +205,7 @@ class VignanApi {
       return this.parseMarks(res.data);
     } catch (err) {
       console.error(`⚠️ Error fetching marks for sem ${semNo}, mid ${midNo}:`, err);
-      return [{ subjectCode: 'ERR', subjectName: 'Network Error - Dummy Subject', assignment1: '0', assignment2: '0', midMarks: '0', finalMarks: '0' }];
+      return [{ subjectCode: 'ERR', subjectName: 'Network Error - Dummy Subject' }];
     }
   }
 }

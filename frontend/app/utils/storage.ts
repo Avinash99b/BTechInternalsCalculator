@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SubjectMarks } from './vignanApiClass';
 
 export interface Preset {
   subjectName: string;
@@ -24,6 +25,40 @@ const CREDENTIALS_KEY = '@vignan_credentials';
 const COOKIE_KEY = '@vignan_cookie';
 const SELECTED_SEM_KEY = '@vignan_selected_semester';
 const SELECTED_MID_KEY = '@vignan_selected_mid';
+const MARKS_CACHE_PREFIX = '@vignan_marks_cache';
+
+// Marks Cache
+const getCacheKey = (semester: string, mid: string) => `${MARKS_CACHE_PREFIX}_${semester}_${mid}`;
+
+export const saveMarksToCache = async (semester: string, mid: string, marks: SubjectMarks[]): Promise<void> => {
+  try {
+    const key = getCacheKey(semester, mid);
+    await AsyncStorage.setItem(key, JSON.stringify(marks));
+  } catch (error) {
+    console.error('Error saving marks to cache:', error);
+  }
+};
+
+export const getMarksFromCache = async (semester: string, mid: string): Promise<SubjectMarks[] | null> => {
+  try {
+    const key = getCacheKey(semester, mid);
+    const cachedMarks = await AsyncStorage.getItem(key);
+    return cachedMarks ? JSON.parse(cachedMarks) : null;
+  } catch (error) {
+    console.error('Error getting marks from cache:', error);
+    return null;
+  }
+};
+
+export const clearAllMarksCache = async (): Promise<void> => {
+  try {
+    const allKeys = await AsyncStorage.getAllKeys();
+    const marksKeys = allKeys.filter(key => key.startsWith(MARKS_CACHE_PREFIX));
+    await AsyncStorage.multiRemove(marksKeys);
+  } catch (error) {
+    console.error('Error clearing marks cache:', error);
+  }
+};
 
 // Preset Management
 export const savePreset = async (preset: Preset): Promise<void> => {
