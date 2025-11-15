@@ -1,10 +1,10 @@
+import "../polyfills.node"
 import { Stack } from "expo-router";
 import { useEffect } from "react";
 
 import { getCredentials } from "./utils/storage";
 import { login as apiLogin, getMidMarks } from "./utils/vignanApiClass";
 import { getSelectedSemester, getSelectedMid } from "./utils/storage";
-
 export type RootStackParamsList = {
   Home: undefined;
   R21: undefined;
