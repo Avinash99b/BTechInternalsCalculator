@@ -42,7 +42,7 @@ export default function LoginModal({ visible, onLogin, onCancel, loading }: Logi
 
   const handleLogin = () => {
     if (htno.trim() && password.trim()) {
-      onLogin({ htno, password:password.toUpperCase() });
+      onLogin({ htno, password:password });
     }
   };
 
