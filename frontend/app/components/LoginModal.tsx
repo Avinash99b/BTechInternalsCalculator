@@ -8,9 +8,8 @@ import {
   Modal,
   Animated,
   ActivityIndicator,
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
-  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Credentials } from '../utils/storage';
@@ -29,36 +28,68 @@ export default function LoginModal({ visible, onLogin, onCancel, loading }: Logi
   const [htnoFocused, setHtnoFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [error, setError] = useState('');
-  const modalSlideAnim = useRef(new Animated.Value(60)).current;
-  const modalOpacityAnim = useRef(new Animated.Value(0)).current;
+  // Native-driver animations for the sheet entry (translateY + opacity)
+  const sheetTranslateY = useRef(new Animated.Value(300)).current;
+  const sheetOpacity = useRef(new Animated.Value(0)).current;
+  // Non-native animation for keyboard offset (paddingBottom on root)
+  const keyboardOffset = useRef(new Animated.Value(0)).current;
   const passwordRef = useRef<TextInput>(null);
 
+  // Sheet entry / exit animation
   useEffect(() => {
     if (visible) {
-      modalSlideAnim.setValue(60);
-      modalOpacityAnim.setValue(0);
+      sheetTranslateY.setValue(300);
+      sheetOpacity.setValue(0);
       Animated.parallel([
-        Animated.spring(modalSlideAnim, {
+        Animated.spring(sheetTranslateY, {
           toValue: 0,
           tension: 60,
           friction: 8,
           useNativeDriver: true,
         }),
-        Animated.timing(modalOpacityAnim, {
+        Animated.timing(sheetOpacity, {
           toValue: 1,
           duration: 220,
           useNativeDriver: true,
         }),
       ]).start();
     } else {
-      modalSlideAnim.setValue(60);
-      modalOpacityAnim.setValue(0);
+      sheetTranslateY.setValue(300);
+      sheetOpacity.setValue(0);
       setHtno('');
       setPassword('');
       setShowPassword(false);
       setError('');
     }
-  }, [visible, modalSlideAnim, modalOpacityAnim]);
+  }, [visible, sheetTranslateY, sheetOpacity]);
+
+  // Keyboard listeners: animate the root's paddingBottom so the sheet rises above
+  // the keyboard without using KeyboardAvoidingView (which causes phantom dismiss
+  // taps on Android inside a Modal due to its layout-shrink behaviour).
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const onShow = Keyboard.addListener(showEvent, (e) => {
+      Animated.timing(keyboardOffset, {
+        toValue: e.endCoordinates.height,
+        duration: Platform.OS === 'ios' ? e.duration : 200,
+        useNativeDriver: false,
+      }).start();
+    });
+    const onHide = Keyboard.addListener(hideEvent, (e) => {
+      Animated.timing(keyboardOffset, {
+        toValue: 0,
+        duration: Platform.OS === 'ios' ? e.duration : 200,
+        useNativeDriver: false,
+      }).start();
+    });
+
+    return () => {
+      onShow?.remove();
+      onHide?.remove();
+    };
+  }, [keyboardOffset]);
 
   const handleLogin = () => {
     if (!htno.trim()) {
@@ -81,196 +112,178 @@ export default function LoginModal({ visible, onLogin, onCancel, loading }: Logi
       onRequestClose={onCancel}
       statusBarTranslucent
     >
-      <KeyboardAvoidingView
-        style={styles.keyboardAvoidingView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
-      >
-        <Pressable style={styles.modalOverlay} onPress={onCancel}>
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Inner Pressable stops taps from bubbling up to the overlay dismiss handler */}
-            <Pressable onStartShouldSetResponder={() => true}>
-              <Animated.View
-                style={[
-                  styles.modalContent,
-                  {
-                    transform: [{ translateY: modalSlideAnim }],
-                    opacity: modalOpacityAnim,
-                  },
+      {/*
+        Root: flex column, default justifyContent ('flex-start').
+        paddingBottom tracks keyboard height → sheet lifts above keyboard.
+        The scrim (flex:1) fills all space above the sheet automatically.
+      */}
+      <Animated.View style={[styles.root, { paddingBottom: keyboardOffset }]}>
+
+        {/* Scrim: tapping the dark area outside the sheet dismisses the modal */}
+        <Pressable style={styles.scrim} onPress={onCancel} />
+
+        {/* Entry animation wrapper (native driver: translateY + opacity) */}
+        <Animated.View
+          style={{
+            transform: [{ translateY: sheetTranslateY }],
+            opacity: sheetOpacity,
+          }}
+        >
+          <View style={styles.sheet}>
+
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <View style={styles.iconCircle}>
+                <Ionicons name="log-in" size={28} color="#FF6347" />
+              </View>
+              <View>
+                <Text style={styles.modalTitle}>Vignan Login</Text>
+                <Text style={styles.modalSubtitle}>Lara Portal</Text>
+              </View>
+            </View>
+
+            <Text style={styles.modalDescription}>
+              Enter your credentials to fetch internals automatically.
+            </Text>
+
+            {/* Hall Ticket Number */}
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>Hall Ticket Number</Text>
+              <View style={[styles.inputContainer, htnoFocused && styles.inputContainerFocused]}>
+                <Ionicons
+                  name="id-card-outline"
+                  size={20}
+                  color={htnoFocused ? '#FF6347' : '#aaa'}
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="e.g. 22AB1A0512"
+                  value={htno}
+                  onChangeText={(text) => { setHtno(text); setError(''); }}
+                  autoCapitalize="characters"
+                  autoFocus
+                  placeholderTextColor="#bbb"
+                  returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  blurOnSubmit={false}
+                  onFocus={() => setHtnoFocused(true)}
+                  onBlur={() => setHtnoFocused(false)}
+                />
+              </View>
+            </View>
+
+            {/* Password */}
+            <View style={styles.inputWrapper}>
+              <Text style={styles.inputLabel}>Password</Text>
+              <View style={[styles.inputContainer, passwordFocused && styles.inputContainerFocused]}>
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={20}
+                  color={passwordFocused ? '#FF6347' : '#aaa'}
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  ref={passwordRef}
+                  style={styles.textInput}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChangeText={(text) => { setPassword(text); setError(''); }}
+                  secureTextEntry={!showPassword}
+                  placeholderTextColor="#bbb"
+                  returnKeyType="done"
+                  onSubmitEditing={handleLogin}
+                  onFocus={() => setPasswordFocused(true)}
+                  onBlur={() => setPasswordFocused(false)}
+                />
+                <Pressable
+                  onPress={() => setShowPassword((v) => !v)}
+                  hitSlop={8}
+                  style={styles.eyeButton}
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  accessibilityRole="button"
+                >
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={22}
+                    color="#999"
+                  />
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Inline validation error */}
+            {error ? (
+              <View style={styles.errorRow}>
+                <Ionicons name="alert-circle-outline" size={16} color="#e53935" />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+
+            {/* Action buttons */}
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalButton,
+                  styles.cancelButton,
+                  { opacity: pressed ? 0.7 : 1 },
+                  loading && styles.disabledButton,
                 ]}
+                onPress={onCancel}
+                disabled={loading}
               >
-                {/* Header */}
-                <View style={styles.modalHeader}>
-                  <View style={styles.iconCircle}>
-                    <Ionicons name="log-in" size={28} color="#FF6347" />
-                  </View>
-                  <View>
-                    <Text style={styles.modalTitle}>Vignan Login</Text>
-                    <Text style={styles.modalSubtitle}>Lara Portal</Text>
-                  </View>
-                </View>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </Pressable>
 
-                <Text style={styles.modalDescription}>
-                  Enter your credentials to fetch internals automatically.
-                </Text>
-
-                {/* Hall Ticket Number */}
-                <View style={styles.inputWrapper}>
-                  <Text style={styles.inputLabel}>Hall Ticket Number</Text>
-                  <View
-                    style={[
-                      styles.inputContainer,
-                      htnoFocused && styles.inputContainerFocused,
-                    ]}
-                  >
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalButton,
+                  styles.confirmButton,
+                  { opacity: pressed ? 0.7 : 1 },
+                  loading && styles.disabledButton,
+                ]}
+                onPress={handleLogin}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <>
                     <Ionicons
-                      name="id-card-outline"
-                      size={20}
-                      color={htnoFocused ? '#FF6347' : '#aaa'}
-                      style={styles.inputIcon}
+                      name="log-in-outline"
+                      size={18}
+                      color="#fff"
+                      style={styles.loginIcon}
+                      accessible={false}
                     />
-                    <TextInput
-                      style={styles.modalInput}
-                      placeholder="e.g. 22AB1A0512"
-                      value={htno}
-                      onChangeText={(text) => {
-                        setHtno(text);
-                        setError('');
-                      }}
-                      autoCapitalize="characters"
-                      autoFocus
-                      placeholderTextColor="#bbb"
-                      returnKeyType="next"
-                      onSubmitEditing={() => passwordRef.current?.focus()}
-                      blurOnSubmit={false}
-                      onFocus={() => setHtnoFocused(true)}
-                      onBlur={() => setHtnoFocused(false)}
-                    />
-                  </View>
-                </View>
+                    <Text style={styles.confirmButtonText}>Login</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
 
-                {/* Password */}
-                <View style={styles.inputWrapper}>
-                  <Text style={styles.inputLabel}>Password</Text>
-                  <View
-                    style={[
-                      styles.inputContainer,
-                      passwordFocused && styles.inputContainerFocused,
-                    ]}
-                  >
-                    <Ionicons
-                      name="lock-closed-outline"
-                      size={20}
-                      color={passwordFocused ? '#FF6347' : '#aaa'}
-                      style={styles.inputIcon}
-                    />
-                    <TextInput
-                      ref={passwordRef}
-                      style={styles.modalInput}
-                      placeholder="Enter your password"
-                      value={password}
-                      onChangeText={(text) => {
-                        setPassword(text);
-                        setError('');
-                      }}
-                      secureTextEntry={!showPassword}
-                      placeholderTextColor="#bbb"
-                      returnKeyType="done"
-                      onSubmitEditing={handleLogin}
-                      onFocus={() => setPasswordFocused(true)}
-                      onBlur={() => setPasswordFocused(false)}
-                    />
-                    <Pressable
-                      onPress={() => setShowPassword((v) => !v)}
-                      hitSlop={8}
-                      style={styles.eyeButton}
-                      accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-                      accessibilityRole="button"
-                    >
-                      <Ionicons
-                        name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                        size={22}
-                        color="#999"
-                      />
-                    </Pressable>
-                  </View>
-                </View>
+          </View>
+        </Animated.View>
 
-                {/* Inline error */}
-                {error ? (
-                  <View style={styles.errorRow}>
-                    <Ionicons name="alert-circle-outline" size={16} color="#e53935" />
-                    <Text style={styles.errorText}>{error}</Text>
-                  </View>
-                ) : null}
-
-                {/* Buttons */}
-                <View style={styles.modalButtons}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.modalButton,
-                      styles.cancelButton,
-                      { opacity: pressed ? 0.7 : 1 },
-                      loading && styles.disabledButton,
-                    ]}
-                    onPress={onCancel}
-                    disabled={loading}
-                  >
-                    <Text style={styles.cancelButtonText}>Cancel</Text>
-                  </Pressable>
-
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.modalButton,
-                      styles.confirmButton,
-                      { opacity: pressed ? 0.7 : 1 },
-                      loading && styles.disabledButton,
-                    ]}
-                    onPress={handleLogin}
-                    disabled={loading}
-                  >
-                    {loading ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <>
-                        <Ionicons name="log-in-outline" size={18} color="#fff" style={styles.loginIcon} accessible={false} />
-                        <Text style={styles.confirmButtonText}>Login</Text>
-                      </>
-                    )}
-                  </Pressable>
-                </View>
-              </Animated.View>
-            </Pressable>
-          </ScrollView>
-        </Pressable>
-      </KeyboardAvoidingView>
+      </Animated.View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  keyboardAvoidingView: {
-    flex: 1,
-  },
-  modalOverlay: {
+  root: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    justifyContent: 'flex-end',
+    // Default justifyContent ('flex-start'): scrim (flex:1) fills top,
+    // sheet sits naturally at the bottom.
   },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'flex-end',
+  scrim: {
+    flex: 1,
   },
-  modalContent: {
+  sheet: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
     paddingHorizontal: 28,
     paddingTop: 28,
     paddingBottom: 36,
@@ -341,7 +354,7 @@ const styles = StyleSheet.create({
   inputIcon: {
     marginRight: 8,
   },
-  modalInput: {
+  textInput: {
     flex: 1,
     paddingVertical: 13,
     fontSize: 16,
