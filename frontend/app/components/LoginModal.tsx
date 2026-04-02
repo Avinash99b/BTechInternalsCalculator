@@ -23,6 +23,7 @@ interface LoginModalProps {
 export default function LoginModal({ visible, onLogin, onCancel, loading }: LoginModalProps) {
   const [htno, setHtno] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const modalScaleAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -37,6 +38,7 @@ export default function LoginModal({ visible, onLogin, onCancel, loading }: Logi
       modalScaleAnim.setValue(0);
       setHtno('');
       setPassword('');
+      setShowPassword(false);
     }
   }, [visible]);
 
@@ -89,14 +91,27 @@ export default function LoginModal({ visible, onLogin, onCancel, loading }: Logi
             autoFocus
             placeholderTextColor="#999"
           />
-          <TextInput
-            style={styles.modalInput}
-            placeholder="Password"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            placeholderTextColor="#999"
-          />
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={[styles.modalInput, styles.passwordInput]}
+              placeholder="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              placeholderTextColor="#999"
+            />
+            <Pressable
+              onPress={() => setShowPassword((prev) => !prev)}
+              style={styles.eyeIconButton}
+              hitSlop={8}
+            >
+              <Ionicons
+                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                size={22}
+                color="#666"
+              />
+            </Pressable>
+          </View>
 
           <View style={styles.modalButtons}>
             <Pressable
@@ -179,6 +194,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 16,
     backgroundColor: '#fafafa',
+  },
+  passwordContainer: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  passwordInput: {
+    paddingRight: 46,
+  },
+  eyeIconButton: {
+    position: 'absolute',
+    right: 14,
+    top: 14,
   },
   modalButtons: {
     flexDirection: 'row',
