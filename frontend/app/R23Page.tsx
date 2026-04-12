@@ -365,7 +365,7 @@ export default function R23Page() {
       Toast.show({
         type: 'error',
         text1: 'Export Failed',
-        text2: 'Please try again or check clipboard permissions',
+        text2: 'Please try again',
       });
     }
   };
