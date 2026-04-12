@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SubjectMarks } from '../utils/vignanApiClass';
@@ -14,12 +15,16 @@ interface SubjectDetailModalProps {
   visible: boolean;
   onClose: () => void;
   subject: SubjectMarks | null;
+  onExport: () => void;
+  isExporting: boolean;
 }
 
 const SubjectDetailModal: React.FC<SubjectDetailModalProps> = ({
   visible,
   onClose,
   subject,
+  onExport,
+  isExporting,
 }) => {
   if (!subject) return null;
 
@@ -61,6 +66,20 @@ const SubjectDetailModal: React.FC<SubjectDetailModalProps> = ({
             <Text style={styles.subjectCodeLabel}>Subject Code:</Text>
             <Text style={styles.subjectCodeValue}>{subject.subjectCode}</Text>
           </View>
+          <TouchableOpacity
+            style={[styles.exportButton, isExporting && styles.exportButtonDisabled]}
+            onPress={onExport}
+            disabled={isExporting}
+          >
+            {isExporting ? (
+              <View style={styles.exportingRow}>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={styles.exportButtonText}>Exporting...</Text>
+              </View>
+            ) : (
+              <Text style={styles.exportButtonText}>Export Mid-I & Mid-II JSON</Text>
+            )}
+          </TouchableOpacity>
           <ScrollView contentContainerStyle={styles.detailsContainer}>
             {details.map((item, index) => (
               <View key={index} style={[
@@ -133,6 +152,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#007BFF',
+  },
+  exportButton: {
+    backgroundColor: '#007BFF',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  exportButtonDisabled: {
+    opacity: 0.7,
+  },
+  exportingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  exportButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
   },
   detailsContainer: {
     paddingBottom: 20,
