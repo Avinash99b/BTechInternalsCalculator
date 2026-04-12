@@ -354,7 +354,7 @@ export default function R23Page() {
         return;
       }
 
-      await Promise.resolve(Clipboard.setString(JSON.stringify(presets, null, 2)));
+      await Clipboard.setString(JSON.stringify(presets, null, 2));
       Toast.show({
         type: 'success',
         text1: 'Copied to Clipboard',
