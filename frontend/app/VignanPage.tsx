@@ -9,6 +9,7 @@ import {
   Modal,
   FlatList,
   TouchableOpacity,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useState, useEffect, useRef } from "react";
@@ -115,6 +116,7 @@ export default function VignanPage() {
   const [marks, setMarks] = useState<SubjectMarks[]>([]);
   const [isModalVisible, setModalVisible] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState<SubjectMarks | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const lastFetchKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -207,6 +209,81 @@ export default function VignanPage() {
   const handleCloseModal = () => {
     setModalVisible(false);
     setSelectedSubject(null);
+  };
+
+  const handleExportSubjectMarks = async () => {
+    if (!selectedSubject) return;
+    setIsExporting(true);
+
+    try {
+      const [mid1Marks, mid2Marks] = await Promise.all([
+        getMidMarks(selectedSemester, "1"),
+        getMidMarks(selectedSemester, "2"),
+      ]);
+
+      await Promise.all([
+        saveMarksToCache(selectedSemester, "1", mid1Marks),
+        saveMarksToCache(selectedSemester, "2", mid2Marks),
+      ]);
+
+      const matchesSelectedSubject = (subject: SubjectMarks) =>
+        subject.subjectCode === selectedSubject.subjectCode ||
+        subject.subjectName === selectedSubject.subjectName;
+
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        htno: htno ?? "N/A",
+        semester: selectedSemester,
+        subjectCode: selectedSubject.subjectCode,
+        subjectName: selectedSubject.subjectName,
+        mids: {
+          mid1: mid1Marks.find(matchesSelectedSubject) ?? null,
+          mid2: mid2Marks.find(matchesSelectedSubject) ?? null,
+        },
+      };
+
+      const fileName = `vignan-internals-sem${selectedSemester}-${selectedSubject.subjectCode.replace(/[^a-zA-Z0-9_-]/g, "_") || "subject"}.json`;
+      const webScope = globalThis as any;
+      let downloaded = false;
+
+      if (Platform.OS === "web" && webScope?.document && webScope?.Blob && webScope?.URL) {
+        const blob = new webScope.Blob([JSON.stringify(payload, null, 2)], {
+          type: "application/json",
+        });
+        const url = webScope.URL.createObjectURL(blob);
+        const anchor = webScope.document.createElement("a");
+        anchor.href = url;
+        anchor.download = fileName;
+        webScope.document.body.appendChild(anchor);
+        anchor.click();
+        webScope.document.body.removeChild(anchor);
+        webScope.URL.revokeObjectURL(url);
+        downloaded = true;
+      }
+
+      if (downloaded) {
+        Toast.show({
+          type: "success",
+          text1: "Export completed",
+          text2: `${fileName} downloaded`,
+        });
+      } else {
+        Toast.show({
+          type: "info",
+          text1: "Export prepared",
+          text2: "Web download is required for direct file download.",
+        });
+      }
+    } catch (error) {
+      console.error("Error exporting subject marks:", error);
+      Toast.show({
+        type: "error",
+        text1: "Export failed",
+        text2: "Could not fetch and export latest marks.",
+      });
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   // Get the final marks column name dynamically
@@ -314,7 +391,7 @@ export default function VignanPage() {
           {marks.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No marks fetched yet.</Text>
-              <Text style={styles.hintText}>Select a semester and tap "Fetch Marks"</Text>
+              <Text style={styles.hintText}>Select a semester and tap &quot;Fetch Marks&quot;</Text>
             </View>
           ) : (
             marks.map((mark, i) => {
@@ -346,6 +423,8 @@ export default function VignanPage() {
         visible={isModalVisible}
         onClose={handleCloseModal}
         subject={selectedSubject}
+        onExport={handleExportSubjectMarks}
+        isExporting={isExporting}
       />
       <Toast />
     </SafeAreaView>
