@@ -32,30 +32,6 @@ import {
 import { getMidMarks, SubjectMarks } from "./utils/vignanApiClass";
 import SubjectDetailModal from "./components/SubjectDetailModal";
 
-type WebDownloadScope = {
-  document?: {
-    createElement: (tag: string) => {
-      href: string;
-      download: string;
-      click: () => void;
-    };
-    body: {
-      appendChild: (node: unknown) => void;
-      removeChild: (node: unknown) => void;
-    };
-  };
-  Blob?: new (
-    blobParts?: Array<string>,
-    options?: {
-      type?: string;
-    }
-  ) => unknown;
-  URL?: {
-    createObjectURL: (object: unknown) => string;
-    revokeObjectURL: (url: string) => void;
-  };
-};
-
 // Semester Selector Component
 function SemesterSelector({
   selected,
@@ -267,29 +243,24 @@ export default function VignanPage() {
       };
 
       const sanitizedSubjectCode = selectedSubject.subjectCode
+        .trim()
         .replace(/[^a-zA-Z0-9_-]/g, "_")
-        .trim();
+        .replace(/^[_-]+|[_-]+$/g, "");
       const safeSubjectCode = sanitizedSubjectCode.length > 0 ? sanitizedSubjectCode : "subject";
       const fileName = `vignan-internals-sem${selectedSemester}-${safeSubjectCode}.json`;
-      const webScope = globalThis as WebDownloadScope;
-      let downloaded = false;
 
-      if (Platform.OS === "web" && webScope?.document && webScope?.Blob && webScope?.URL) {
-        const blob = new webScope.Blob([JSON.stringify(payload, null, 2)], {
+      if (Platform.OS === "web") {
+        const blob = new Blob([JSON.stringify(payload, null, 2)], {
           type: "application/json",
         });
-        const url = webScope.URL.createObjectURL(blob);
-        const anchor = webScope.document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
         anchor.href = url;
         anchor.download = fileName;
-        webScope.document.body.appendChild(anchor);
+        document.body.appendChild(anchor);
         anchor.click();
-        webScope.document.body.removeChild(anchor);
-        webScope.URL.revokeObjectURL(url);
-        downloaded = true;
-      }
-
-      if (downloaded) {
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(url);
         Toast.show({
           type: "success",
           text1: "Export completed",
@@ -298,8 +269,8 @@ export default function VignanPage() {
       } else {
         Toast.show({
           type: "info",
-          text1: "Export prepared",
-          text2: "Web download is required for direct file download.",
+          text1: "Export unavailable",
+          text2: "JSON download is currently supported only on web.",
         });
       }
     } catch (error) {
@@ -419,7 +390,7 @@ export default function VignanPage() {
           {marks.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No marks fetched yet.</Text>
-              <Text style={styles.hintText}>Select a semester and tap &quot;Fetch Marks&quot;</Text>
+              <Text style={styles.hintText}>Select a semester and tap Fetch Marks</Text>
             </View>
           ) : (
             marks.map((mark, i) => {
