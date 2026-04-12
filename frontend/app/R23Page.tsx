@@ -19,8 +19,15 @@ import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { savePreset, getPresets, deletePreset, presetExists, Preset } from './utils/storage';
 
+interface SideDrawerProps {
+  visible: boolean;
+  onClose: () => void;
+  onPresetSelect: (preset: Preset) => void;
+  onExport: () => void;
+}
+
 // Custom Drawer Component
-function SideDrawer({ visible, onClose, onPresetSelect, onExport }: any) {
+function SideDrawer({ visible, onClose, onPresetSelect, onExport }: SideDrawerProps) {
   const [presets, setPresets] = useState<Preset[]>([]);
   const slideAnim = useRef(new Animated.Value(-300)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
@@ -336,22 +343,31 @@ export default function R23Page() {
   };
 
   const handleExportPresets = async () => {
-    const presets = await getPresets();
-    if (presets.length === 0) {
-      Toast.show({
-        type: 'info',
-        text1: 'No Data to Export',
-        text2: 'Save at least one preset first',
-      });
-      return;
-    }
+    try {
+      const presets = await getPresets();
+      if (presets.length === 0) {
+        Toast.show({
+          type: 'info',
+          text1: 'No Data to Export',
+          text2: 'Save at least one preset first',
+        });
+        return;
+      }
 
-    Clipboard.setString(JSON.stringify(presets, null, 2));
-    Toast.show({
-      type: 'success',
-      text1: 'Copied to Clipboard',
-      text2: 'Presets exported as JSON',
-    });
+      Clipboard.setString(JSON.stringify(presets, null, 2));
+      Toast.show({
+        type: 'success',
+        text1: 'Copied to Clipboard',
+        text2: 'Presets exported as JSON',
+      });
+    } catch (error) {
+      console.error('Failed to copy presets to clipboard:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Export Failed',
+        text2: 'Could not copy presets JSON to clipboard',
+      });
+    }
   };
 
   const handleSavePreset = async () => {
