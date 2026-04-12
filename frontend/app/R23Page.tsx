@@ -10,6 +10,7 @@ import {
   Alert,
   Animated,
   Easing,
+  Clipboard,
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Card from "./components/Card";
@@ -18,8 +19,15 @@ import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { savePreset, getPresets, deletePreset, presetExists, Preset } from './utils/storage';
 
+interface SideDrawerProps {
+  visible: boolean;
+  onClose: () => void;
+  onPresetSelect: (preset: Preset) => void;
+  onExport: () => void;
+}
+
 // Custom Drawer Component
-function SideDrawer({ visible, onClose, onPresetSelect }: any) {
+function SideDrawer({ visible, onClose, onPresetSelect, onExport }: SideDrawerProps) {
   const [presets, setPresets] = useState<Preset[]>([]);
   const slideAnim = useRef(new Animated.Value(-300)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
@@ -123,6 +131,14 @@ function SideDrawer({ visible, onClose, onPresetSelect }: any) {
           <View style={styles.drawerHeader}>
             <Ionicons name="bookmarks" size={32} color="#FF6347" />
             <Text style={styles.drawerTitle}>Saved Subjects</Text>
+            <TouchableOpacity
+              onPress={onExport}
+              style={styles.exportButton}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="copy-outline" size={18} color="#fff" />
+              <Text style={styles.exportButtonText}>Export</Text>
+            </TouchableOpacity>
           </View>
 
         <ScrollView style={styles.drawerContent}>
@@ -326,6 +342,34 @@ export default function R23Page() {
     setModalVisible(true);
   };
 
+  const handleExportPresets = async () => {
+    try {
+      const presets = await getPresets();
+      if (presets.length === 0) {
+        Toast.show({
+          type: 'info',
+          text1: 'No Data to Export',
+          text2: 'Save at least one preset first',
+        });
+        return;
+      }
+
+      await Clipboard.setString(JSON.stringify(presets, null, 2));
+      Toast.show({
+        type: 'success',
+        text1: 'Copied to Clipboard',
+        text2: 'Presets exported as JSON',
+      });
+    } catch (error) {
+      console.error('Failed to copy presets to clipboard:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Export Failed',
+        text2: 'Please try again',
+      });
+    }
+  };
+
   const handleSavePreset = async () => {
     if (!subjectName.trim()) {
       Toast.show({
@@ -389,6 +433,7 @@ export default function R23Page() {
         visible={drawerVisible}
         onClose={() => setDrawerVisible(false)}
         onPresetSelect={handlePresetSelect}
+        onExport={handleExportPresets}
       />
 
       <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
@@ -784,6 +829,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     paddingTop: 16,
+  },
+  exportButton: {
+    marginLeft: 'auto',
+    backgroundColor: '#FF6347',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  exportButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
   },
   drawerTitle: {
     fontSize: 20,
