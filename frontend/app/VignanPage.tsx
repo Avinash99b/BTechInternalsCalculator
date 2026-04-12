@@ -32,6 +32,30 @@ import {
 import { getMidMarks, SubjectMarks } from "./utils/vignanApiClass";
 import SubjectDetailModal from "./components/SubjectDetailModal";
 
+type WebDownloadScope = {
+  document?: {
+    createElement: (tag: string) => {
+      href: string;
+      download: string;
+      click: () => void;
+    };
+    body: {
+      appendChild: (node: unknown) => void;
+      removeChild: (node: unknown) => void;
+    };
+  };
+  Blob?: new (
+    blobParts?: Array<string>,
+    options?: {
+      type?: string;
+    }
+  ) => unknown;
+  URL?: {
+    createObjectURL: (object: unknown) => string;
+    revokeObjectURL: (url: string) => void;
+  };
+};
+
 // Semester Selector Component
 function SemesterSelector({
   selected,
@@ -242,8 +266,12 @@ export default function VignanPage() {
         },
       };
 
-      const fileName = `vignan-internals-sem${selectedSemester}-${selectedSubject.subjectCode.replace(/[^a-zA-Z0-9_-]/g, "_") || "subject"}.json`;
-      const webScope = globalThis as any;
+      const sanitizedSubjectCode = selectedSubject.subjectCode
+        .replace(/[^a-zA-Z0-9_-]/g, "_")
+        .trim();
+      const safeSubjectCode = sanitizedSubjectCode.length > 0 ? sanitizedSubjectCode : "subject";
+      const fileName = `vignan-internals-sem${selectedSemester}-${safeSubjectCode}.json`;
+      const webScope = globalThis as WebDownloadScope;
       let downloaded = false;
 
       if (Platform.OS === "web" && webScope?.document && webScope?.Blob && webScope?.URL) {
